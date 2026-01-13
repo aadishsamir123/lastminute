@@ -54,7 +54,7 @@ class DefaultFirebaseOptions {
     appId: '1:721938208549:web:635ca979585cd86c492ccc',
     messagingSenderId: '721938208549',
     projectId: 'asdev-school-lastminute',
-    authDomain: 'asdev-school-lastminute.firebaseapp.com',
+    authDomain: 'lastminute-auth.aadish.dev',
     storageBucket: 'asdev-school-lastminute.firebasestorage.app',
   );
 
