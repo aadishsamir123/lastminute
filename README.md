@@ -1,5 +1,7 @@
 # LastMinute - Because Deadlines Always Sneak Up 📚⏰
 
+[![Flutter CI](https://github.com/aadishsamir123/lastminute/actions/workflows/flutter-ci.yml/badge.svg)](https://github.com/aadishsamir123/lastminute/actions/workflows/flutter-ci.yml)
+
 A beautiful, feature-rich homework reminder app built with Flutter and Firebase, designed to help students stay on top of their assignments with style.
 
 ## ✨ Features
