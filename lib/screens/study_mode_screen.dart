@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:installed_apps/app_info.dart';
 
 import '../services/study_mode_service.dart';
 
@@ -17,11 +18,14 @@ class _StudyModeScreenState extends State<StudyModeScreen> {
   Timer? _timer;
   Duration _remainingTime = Duration.zero;
   int _selectedMinutes = 25; // Pomodoro default
+  List<String> _allowedApps = [];
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    if (_studyModeService.isStudyModeActive) {
+    _loadAllowedApps();
+    if (_studyModeService.isSessionActive) {
       _startTimer();
     }
   }
@@ -32,346 +36,564 @@ class _StudyModeScreenState extends State<StudyModeScreen> {
     super.dispose();
   }
 
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _remainingTime = _studyModeService.getRemainingTime();
-        if (_remainingTime == Duration.zero) {
-          timer.cancel();
-        }
-      });
+  Future<void> _loadAllowedApps() async {
+    setState(() => _isLoading = true);
+    await _studyModeService.loadAllowedApps();
+    setState(() {
+      _allowedApps = _studyModeService.allowedApps;
+      _isLoading = false;
     });
   }
 
-  void _startStudySession() {
-    _studyModeService.startStudyMode(
-      Duration(minutes: _selectedMinutes),
-      onComplete: () {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('🎉 Session Complete!'),
-              content: Text(
-                'You studied for $_selectedMinutes minutes. Great job!',
-              ),
-              actions: [
-                FilledButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Awesome!'),
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _remainingTime = _studyModeService.getRemainingTime();
+          if (_remainingTime == Duration.zero) {
+            timer.cancel();
+          }
+        });
+      }
+    });
+  }
+
+  void _startStudySession() async {
+    if (kIsWeb || !_studyModeService.isStudyModeActive) {
+      if (_allowedApps.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select at least one allowed app first'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      await _studyModeService.startStudySession(
+        duration: Duration(minutes: _selectedMinutes),
+        onBlockedAppDetected: (appName) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '🚫 $appName is not allowed during study session',
                 ),
-              ],
-            ),
-          );
-          setState(() {});
-        }
-      },
-    );
-    _startTimer();
-    setState(() {});
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+        onComplete: () {
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('🎉 Session Complete!'),
+                content: Text(
+                  'You studied for $_selectedMinutes minutes. Great job!',
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Awesome!'),
+                  ),
+                ],
+              ),
+            );
+            setState(() {});
+          }
+        },
+      );
+      _startTimer();
+      setState(() {});
+    }
   }
 
   void _stopStudySession() {
-    _studyModeService.stopStudyMode();
+    _studyModeService.stopStudySession();
     _timer?.cancel();
     setState(() {});
+  }
+
+  Future<void> _selectAllowedApps() async {
+    setState(() => _isLoading = true);
+
+    final apps = await _studyModeService.getInstalledApps();
+
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    print('📱 Retrieved ${apps.length} apps for selection');
+
+    if (apps.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No apps available. Make sure app permissions are granted.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final selected = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _AllowedAppsSelector(
+        installedApps: apps,
+        currentlyAllowed: _allowedApps,
+      ),
+    );
+
+    if (selected != null) {
+      try {
+        await _studyModeService.saveAllowedApps(selected);
+        setState(() => _allowedApps = selected);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${selected.length} apps allowed'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isActive = _studyModeService.isStudyModeActive;
+    final isActive = _studyModeService.isSessionActive;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Study Mode')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Hero section
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.psychology_rounded,
-                    size: 80,
-                    color: colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Focus Time',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isActive
-                        ? 'Stay focused! You\'re doing great.'
-                        : 'Set a timer and block distractions',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  // Timer display
-                  Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? colorScheme.primaryContainer
-                          : colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(
-                        color: isActive
-                            ? colorScheme.primary
-                            : Colors.transparent,
-                        width: 4,
-                      ),
-                    ),
-                    child: Text(
-                      isActive
-                          ? _formatDuration(_remainingTime)
-                          : _formatDuration(
-                              Duration(minutes: _selectedMinutes),
-                            ),
-                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: isActive
-                            ? colorScheme.onPrimaryContainer
-                            : colorScheme.onSurface,
-                        fontFeatures: [const FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ),
-                  if (!isActive) ...[
-                    const SizedBox(height: 24),
-                    // Time presets
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.center,
-                      children: [15, 25, 45, 60, 90].map((minutes) {
-                        return FilterChip(
-                          selected: _selectedMinutes == minutes,
-                          label: Text('$minutes min'),
-                          onSelected: (selected) {
-                            setState(() => _selectedMinutes = minutes);
-                          },
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  // Start/Stop button
-                  FilledButton.icon(
-                    onPressed: isActive
-                        ? _stopStudySession
-                        : _startStudySession,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
-                      backgroundColor: isActive
-                          ? colorScheme.error
-                          : colorScheme.primary,
-                    ),
-                    icon: Icon(
-                      isActive ? Icons.stop_rounded : Icons.play_arrow_rounded,
-                    ),
-                    label: Text(isActive ? 'Stop Session' : 'Start Session'),
-                  ),
-                ],
-              ),
+    if (kIsWeb) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Study Mode')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Study mode with app blocking is only available on Android',
+              textAlign: TextAlign.center,
             ),
           ),
-          const SizedBox(height: 16),
-          // Features card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        color: colorScheme.primary,
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Focus Session'),
+        actions: [
+          if (isActive)
+            IconButton(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Stop Session?'),
+                    content: const Text(
+                      'Are you sure you want to stop your study session?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Study Mode Features',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                      FilledButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _stopStudySession();
+                        },
+                        child: const Text('Stop'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  _FeatureItem(
-                    icon: Icons.timer_rounded,
-                    title: 'Focused Timer',
-                    description:
-                        'Set custom study sessions with built-in breaks',
-                  ),
-                  if (!kIsWeb)
-                    _FeatureItem(
-                      icon: Icons.do_not_disturb_on_rounded,
-                      title: 'Distraction Blocking',
-                      description:
-                          'Block distracting apps during study time (Android)',
-                      available: !kIsWeb,
+                );
+              },
+              icon: const Icon(Icons.stop_circle_outlined),
+            ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator.adaptive())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Timer Display
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          Icon(
+                            isActive ? Icons.timer : Icons.timer_outlined,
+                            size: 64,
+                            color: isActive ? colorScheme.primary : Colors.grey,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            isActive
+                                ? _formatDuration(_remainingTime)
+                                : _formatDuration(
+                                    Duration(minutes: _selectedMinutes),
+                                  ),
+                            style: Theme.of(context).textTheme.displayLarge
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.primary,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            isActive ? 'Time Remaining' : 'Session Duration',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodyLarge?.copyWith(color: Colors.grey),
+                          ),
+                        ],
+                      ),
                     ),
-                  _FeatureItem(
-                    icon: Icons.analytics_rounded,
-                    title: 'Track Progress',
-                    description: 'Monitor your study habits and improve focus',
                   ),
-                  _FeatureItem(
-                    icon: Icons.emoji_events_rounded,
-                    title: 'Stay Motivated',
-                    description:
-                        'Complete sessions and build healthy study habits',
+                  const SizedBox(height: 24),
+
+                  // Allowed Apps Section
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.apps_rounded,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Allowed Apps',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${_allowedApps.length}/10',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          if (_allowedApps.isEmpty)
+                            const Text(
+                              'No apps selected. Only system apps will be accessible.',
+                              style: TextStyle(color: Colors.grey),
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _allowedApps.map((packageName) {
+                                return Chip(
+                                  avatar: const Icon(
+                                    Icons.app_shortcut,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    packageName.split('.').last,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: isActive ? null : _selectAllowedApps,
+                            icon: const Icon(Icons.edit),
+                            label: const Text('Select Apps'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Duration Presets (only when not active)
+                  if (!isActive) ...[
+                    Text(
+                      'Duration Presets',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        _buildDurationChip(25, 'Pomodoro'),
+                        _buildDurationChip(50, 'Extended'),
+                        _buildDurationChip(90, 'Deep Work'),
+                        _buildDurationChip(120, 'Marathon'),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+
+                  // Start/Stop Button
+                  SizedBox(
+                    height: 56,
+                    child: FilledButton.icon(
+                      onPressed: isActive
+                          ? _stopStudySession
+                          : _startStudySession,
+                      icon: Icon(isActive ? Icons.stop : Icons.play_arrow),
+                      label: Text(
+                        isActive ? 'Stop Session' : 'Start Session',
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Info Card
+                  Card(
+                    color: colorScheme.primaryContainer.withOpacity(0.3),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: colorScheme.primary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'During the session, only selected apps and system apps can be opened. Social media apps are blocked.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.onSurface.withOpacity(0.8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-          if (!kIsWeb) ...[
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.apps_rounded, color: colorScheme.secondary),
-                        const SizedBox(width: 8),
-                        Text(
-                          'App Usage (Android Only)',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    FutureBuilder<Duration>(
-                      future: _studyModeService.getTodayStudyTime(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: CircularProgressIndicator.adaptive(),
-                            ),
-                          );
-                        }
+    );
+  }
 
-                        final studyTime = snapshot.data ?? Duration.zero;
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: CircleAvatar(
-                            backgroundColor: colorScheme.secondaryContainer,
-                            child: Icon(
-                              Icons.today_rounded,
-                              color: colorScheme.onSecondaryContainer,
-                            ),
-                          ),
-                          title: const Text('Today\'s Study Time'),
-                          subtitle: Text(_formatDuration(studyTime)),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
+  Widget _buildDurationChip(int minutes, String label) {
+    final isSelected = _selectedMinutes == minutes;
+    return FilterChip(
+      selected: isSelected,
+      label: Text('$minutes min\n$label'),
+      onSelected: (selected) {
+        if (selected) {
+          setState(() => _selectedMinutes = minutes);
+        }
+      },
     );
   }
 
   String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds.remainder(60);
 
     if (hours > 0) {
-      return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}';
+      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     }
-    return '${twoDigits(minutes)}:${twoDigits(seconds)}';
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 }
 
-class _FeatureItem extends StatelessWidget {
-  const _FeatureItem({
-    required this.icon,
-    required this.title,
-    required this.description,
-    this.available = true,
+class _AllowedAppsSelector extends StatefulWidget {
+  const _AllowedAppsSelector({
+    required this.installedApps,
+    required this.currentlyAllowed,
   });
 
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool available;
+  final List<AppInfo> installedApps;
+  final List<String> currentlyAllowed;
+
+  @override
+  State<_AllowedAppsSelector> createState() => _AllowedAppsSelectorState();
+}
+
+class _AllowedAppsSelectorState extends State<_AllowedAppsSelector> {
+  late Set<String> _selectedApps;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedApps = Set.from(widget.currentlyAllowed);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final filteredApps = widget.installedApps.where((app) {
+      return app.name.toLowerCase().contains(_searchQuery.toLowerCase());
+    }).toList();
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: available
-                  ? colorScheme.primaryContainer
-                  : colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              icon,
-              color: available
-                  ? colorScheme.primary
-                  : colorScheme.onSurfaceVariant,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+    return DraggableScrollableSheet(
+      initialChildSize: 0.9,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Select Allowed Apps',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_selectedApps.length}/10 selected',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  FilledButton(
+                    onPressed: () =>
+                        Navigator.pop(context, _selectedApps.toList()),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+
+            // Search bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search apps...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                ),
+                onChanged: (value) => setState(() => _searchQuery = value),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Apps list
+            Expanded(
+              child: filteredApps.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.apps_outlined,
+                              size: 64,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              widget.installedApps.isEmpty
+                                  ? 'No apps available'
+                                  : 'No apps match your search',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              widget.installedApps.isEmpty
+                                  ? 'Make sure the app has permission to access installed apps'
+                                  : 'Try a different search term',
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: Colors.grey),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollController,
+                      itemCount: filteredApps.length,
+                      itemBuilder: (context, index) {
+                        final app = filteredApps[index];
+                        final isSelected = _selectedApps.contains(
+                          app.packageName,
+                        );
+                        final canSelect =
+                            _selectedApps.length < 10 || isSelected;
+
+                        return CheckboxListTile(
+                          value: isSelected,
+                          enabled: canSelect,
+                          onChanged: canSelect
+                              ? (value) {
+                                  setState(() {
+                                    if (value == true) {
+                                      _selectedApps.add(app.packageName);
+                                    } else {
+                                      _selectedApps.remove(app.packageName);
+                                    }
+                                  });
+                                }
+                              : null,
+                          title: Text(app.name),
+                          subtitle: Text(
+                            app.packageName,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          secondary: app.icon != null
+                              ? Image.memory(app.icon!, width: 40, height: 40)
+                              : const Icon(Icons.app_shortcut),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

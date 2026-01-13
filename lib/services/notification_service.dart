@@ -14,39 +14,54 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   Future<void> initialize() async {
-    if (kIsWeb) return; // Notifications not supported on web
+    if (kIsWeb) {
+      print('ℹ️ Notifications not supported on web');
+      return;
+    }
 
-    tz.initializeTimeZones();
+    try {
+      print('🔔 Initializing notification service...');
+      tz.initializeTimeZones();
+      print('✅ Timezone initialized');
 
-    const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
-    );
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+      const androidSettings = AndroidInitializationSettings(
+        '@mipmap/ic_launcher',
+      );
+      const iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
 
-    const settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
+      const settings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
 
-    await _notifications.initialize(settings);
+      final initialized = await _notifications.initialize(settings);
+      print('✅ Notification plugin initialized: $initialized');
 
-    // Request permissions
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      await _notifications
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.requestNotificationsPermission();
-    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-      await _notifications
-          .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin
-          >()
-          ?.requestPermissions(alert: true, badge: true, sound: true);
+      // Request permissions
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final granted = await _notifications
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.requestNotificationsPermission();
+        print('🔔 Android notification permission granted: $granted');
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final granted = await _notifications
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >()
+            ?.requestPermissions(alert: true, badge: true, sound: true);
+        print('🔔 iOS notification permission granted: $granted');
+      }
+
+      print('✅ Notification service initialized successfully');
+    } catch (e, stackTrace) {
+      print('❌ ERROR initializing notification service: $e');
+      print('📋 Stack trace: $stackTrace');
     }
   }
 
@@ -54,6 +69,16 @@ class NotificationService {
     if (kIsWeb) return;
 
     try {
+      print(
+        '🔔 Scheduling ${homework.reminderTimes.length} reminder(s) for "${homework.title}"',
+      );
+
+      if (homework.reminderTimes.isEmpty) {
+        print('ℹ️ No reminder times set for this homework');
+        return;
+      }
+
+      int scheduled = 0;
       for (int i = 0; i < homework.reminderTimes.length; i++) {
         final reminderTime = homework.reminderTimes[i];
         if (reminderTime.isAfter(DateTime.now())) {
@@ -64,8 +89,18 @@ class NotificationService {
                 homework.description ?? 'Due: ${_formatDate(homework.dueDate)}',
             scheduledDate: reminderTime,
           );
+          scheduled++;
+          print(
+            '✅ Scheduled reminder #${i + 1} for ${_formatDate(reminderTime)}',
+          );
+        } else {
+          print('⏭️ Skipping past reminder time: ${_formatDate(reminderTime)}');
         }
       }
+
+      print(
+        '✅ Successfully scheduled $scheduled out of ${homework.reminderTimes.length} reminders',
+      );
     } catch (e, stackTrace) {
       print('❌ ERROR scheduling homework reminder: $e');
       print('📋 Stack trace: $stackTrace');
@@ -79,11 +114,14 @@ class NotificationService {
     required DateTime scheduledDate,
   }) async {
     try {
+      final tzScheduledDate = tz.TZDateTime.from(scheduledDate, tz.local);
+      print('📅 Scheduling notification ID $id for $tzScheduledDate');
+
       await _notifications.zonedSchedule(
         id,
         title,
         body,
-        tz.TZDateTime.from(scheduledDate, tz.local),
+        tzScheduledDate,
         const NotificationDetails(
           android: AndroidNotificationDetails(
             'homework_reminders',
@@ -98,9 +136,12 @@ class NotificationService {
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
       );
+
+      print('✅ Notification scheduled successfully (ID: $id)');
     } catch (e, stackTrace) {
       print('❌ ERROR scheduling notification (ID: $id): $e');
       print('📋 Stack trace: $stackTrace');
+      rethrow;
     }
   }
 

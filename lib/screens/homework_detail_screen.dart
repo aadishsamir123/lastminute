@@ -68,7 +68,7 @@ class _HomeworkDetailScreenState extends State<HomeworkDetailScreen> {
       _dueTime.minute,
     );
 
-    final homework = Homework(
+    var homework = Homework(
       id: widget.homework?.id ?? '',
       userId: FirebaseAuth.instance.currentUser!.uid,
       title: _titleController.text.trim(),
@@ -87,13 +87,30 @@ class _HomeworkDetailScreenState extends State<HomeworkDetailScreen> {
     );
 
     try {
+      String homeworkId;
       if (widget.homework == null) {
-        await _firestoreService.createHomework(homework);
+        // Create new homework and get the ID
+        homeworkId = await _firestoreService.createHomework(homework);
+        // Update homework with the real ID from Firestore
+        homework = Homework(
+          id: homeworkId,
+          userId: homework.userId,
+          title: homework.title,
+          description: homework.description,
+          subject: homework.subject,
+          dueDate: homework.dueDate,
+          priority: homework.priority,
+          isCompleted: homework.isCompleted,
+          createdAt: homework.createdAt,
+          completedAt: homework.completedAt,
+          reminderTimes: homework.reminderTimes,
+        );
       } else {
         await _firestoreService.updateHomework(homework);
         await _notificationService.cancelHomeworkReminders(homework.id);
       }
 
+      // Schedule notifications with the correct homework ID
       await _notificationService.scheduleHomeworkReminder(homework);
 
       if (mounted) {

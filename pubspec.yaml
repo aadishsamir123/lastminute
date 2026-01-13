@@ -26,7 +26,9 @@ dependencies:
   # Platform-specific (Android calendar & study mode)
   device_calendar: ^4.3.2
   app_usage: ^4.0.1
-
+  shared_preferences: ^2.3.4
+  installed_apps: ^2.1.0
+  flutter_overlay_window: ^0.5.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

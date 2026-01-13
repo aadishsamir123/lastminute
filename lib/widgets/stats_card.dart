@@ -47,6 +47,7 @@ class StatsCard extends StatelessWidget {
                         color: colorScheme.primary,
                       ),
                     ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _StatItem(
                         label: 'Completed',
@@ -68,6 +69,7 @@ class StatsCard extends StatelessWidget {
                         color: Colors.orange,
                       ),
                     ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _StatItem(
                         label: 'Overdue',
