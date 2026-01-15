@@ -28,129 +28,314 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
   int _selectedIndex = 0;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
+    );
+    _fadeController.forward();
+  }
+
+  @override
+  void didUpdateWidget(HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _fadeController.reset();
+    _fadeController.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
+  }
+
+  void _onNavigationChanged(int index) {
+    if (_selectedIndex != index) {
+      _fadeController.reset();
+      setState(() {
+        _selectedIndex = index;
+      });
+      _fadeController.forward();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
+    if (isDesktop) {
+      return Scaffold(
+        body: Row(
           children: [
-            Icon(Icons.schedule, color: colorScheme.primary, size: 28),
-            const SizedBox(width: 8),
-            const Text(
-              'LastMinute',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            // Desktop Drawer Navigation
+            NavigationRail(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _onNavigationChanged,
+              labelType: NavigationRailLabelType.all,
+              destinations: const [
+                NavigationRailDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: Text('Home'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.person_outline_rounded),
+                  selectedIcon: Icon(Icons.person_rounded),
+                  label: Text('Profile'),
+                ),
+              ],
+            ),
+            const VerticalDivider(thickness: 1, width: 1),
+            // Main Content
+            Expanded(
+              child: Column(
+                children: [
+                  AppBar(
+                    title: Row(
+                      children: [
+                        Icon(
+                          Icons.schedule,
+                          color: colorScheme.primary,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'LastMinute',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      IconButton(
+                        tooltip: 'Calendar',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CalendarScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.calendar_today_rounded),
+                      ),
+                      IconButton(
+                        tooltip: 'Study Mode',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const StudyModeScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.psychology_rounded),
+                      ),
+                      PopupMenuButton<int>(
+                        icon: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: colorScheme.primaryContainer,
+                          child: Text(
+                            (widget.user.displayName?.trim().isNotEmpty ??
+                                    false)
+                                ? widget.user.displayName![0].toUpperCase()
+                                : 'U',
+                            style: TextStyle(
+                              color: colorScheme.onPrimaryContainer,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        itemBuilder: (context) => <PopupMenuEntry<int>>[
+                          PopupMenuItem(
+                            child: Text(widget.user.displayName ?? 'User'),
+                            enabled: false,
+                          ),
+                          const PopupMenuDivider(),
+                          PopupMenuItem(
+                            onTap: () async {
+                              try {
+                                await widget.authService.signOut();
+                              } catch (e) {
+                                print('❌ ERROR in logout popup: $e');
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Logout failed: $e'),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            child: const Row(
+                              children: [
+                                Icon(Icons.logout_rounded),
+                                SizedBox(width: 8),
+                                Text('Sign out'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: _selectedIndex == 0
+                          ? _buildHomeTab()
+                          : _buildProfileTab(),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Calendar',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CalendarScreen()),
-              );
-            },
-            icon: const Icon(Icons.calendar_today_rounded),
-          ),
-          IconButton(
-            tooltip: 'Study Mode',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const StudyModeScreen()),
-              );
-            },
-            icon: const Icon(Icons.psychology_rounded),
-          ),
-          PopupMenuButton<int>(
-            icon: CircleAvatar(
-              radius: 16,
-              backgroundColor: colorScheme.primaryContainer,
-              child: Text(
-                (widget.user.displayName?.trim().isNotEmpty ?? false)
-                    ? widget.user.displayName![0].toUpperCase()
-                    : 'U',
-                style: TextStyle(
-                  color: colorScheme.onPrimaryContainer,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            itemBuilder: (context) => <PopupMenuEntry<int>>[
-              PopupMenuItem(
-                child: Text(widget.user.displayName ?? 'User'),
-                enabled: false,
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                onTap: () async {
-                  try {
-                    await widget.authService.signOut();
-                  } catch (e) {
-                    print('❌ ERROR in logout popup: $e');
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Logout failed: $e')),
-                      );
-                    }
-                  }
+        floatingActionButton: _selectedIndex == 0
+            ? FloatingActionButton.extended(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const HomeworkDetailScreen(),
+                    ),
+                  );
                 },
-                child: const Row(
-                  children: [
-                    Icon(Icons.logout_rounded),
-                    SizedBox(width: 8),
-                    Text('Sign out'),
-                  ],
-                ),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Add Homework'),
+              )
+            : null,
+      );
+    } else {
+      // Mobile Layout
+      return Scaffold(
+        appBar: AppBar(
+          title: Row(
+            children: [
+              Icon(Icons.schedule, color: colorScheme.primary, size: 28),
+              const SizedBox(width: 8),
+              const Text(
+                'LastMinute',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ],
           ),
-        ],
-      ),
-      body: _selectedIndex == 0 ? _buildHomeTab() : _buildProfileTab(),
-      floatingActionButton: _selectedIndex == 0
-          ? FloatingActionButton.extended(
+          actions: [
+            IconButton(
+              tooltip: 'Calendar',
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const HomeworkDetailScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const CalendarScreen()),
                 );
               },
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Homework'),
-            )
-          : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
-            label: 'Profile',
-          ),
-        ],
-      ),
-    );
+              icon: const Icon(Icons.calendar_today_rounded),
+            ),
+            IconButton(
+              tooltip: 'Study Mode',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const StudyModeScreen()),
+                );
+              },
+              icon: const Icon(Icons.psychology_rounded),
+            ),
+            PopupMenuButton<int>(
+              icon: CircleAvatar(
+                radius: 16,
+                backgroundColor: colorScheme.primaryContainer,
+                child: Text(
+                  (widget.user.displayName?.trim().isNotEmpty ?? false)
+                      ? widget.user.displayName![0].toUpperCase()
+                      : 'U',
+                  style: TextStyle(
+                    color: colorScheme.onPrimaryContainer,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              itemBuilder: (context) => <PopupMenuEntry<int>>[
+                PopupMenuItem(
+                  child: Text(widget.user.displayName ?? 'User'),
+                  enabled: false,
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  onTap: () async {
+                    try {
+                      await widget.authService.signOut();
+                    } catch (e) {
+                      print('❌ ERROR in logout popup: $e');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Logout failed: $e')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Row(
+                    children: [
+                      Icon(Icons.logout_rounded),
+                      SizedBox(width: 8),
+                      Text('Sign out'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        body: FadeTransition(
+          opacity: _fadeAnimation,
+          child: _selectedIndex == 0 ? _buildHomeTab() : _buildProfileTab(),
+        ),
+        floatingActionButton: _selectedIndex == 0
+            ? FloatingActionButton.extended(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const HomeworkDetailScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Add Homework'),
+              )
+            : null,
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: _onNavigationChanged,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline_rounded),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'Profile',
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildHomeTab() {
