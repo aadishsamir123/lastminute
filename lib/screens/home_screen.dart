@@ -44,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late Animation<double> _fadeAnimation;
   Timer? _appMonitoringTimer;
   String? _lastForegroundApp;
+  bool _completedExpanded = false;
 
   @override
   void initState() {
@@ -500,7 +501,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         setState(() {});
       },
       child: StreamBuilder<List<Homework>>(
-        stream: _firestoreService.getIncompleteHomework(),
+        stream: _firestoreService.getHomeworkStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator.adaptive());
@@ -537,9 +538,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             );
           }
 
-          final homework = snapshot.data ?? [];
-          final overdue = homework.where((h) => h.isOverdue).toList();
-          final upcoming = homework.where((h) => !h.isOverdue).toList();
+          final allHomework = snapshot.data ?? [];
+          final incomplete = allHomework.where((h) => !h.isCompleted).toList();
+          final completed = allHomework.where((h) => h.isCompleted).toList()
+            ..sort(
+              (a, b) => (b.completedAt ?? b.dueDate).compareTo(
+                a.completedAt ?? a.dueDate,
+              ),
+            );
+
+          final overdue = incomplete.where((h) => h.isOverdue).toList();
+          final upcoming = incomplete.where((h) => !h.isOverdue).toList();
 
           return CustomScrollView(
             slivers: [
@@ -625,7 +634,77 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
               ],
-              if (homework.isEmpty)
+              if (completed.isNotEmpty)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Card(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceVariant.withOpacity(0.7),
+                      child: Theme(
+                        data: Theme.of(context).copyWith(
+                          dividerColor: Colors.transparent,
+                          splashColor: Colors.transparent,
+                        ),
+                        child: ExpansionTile(
+                          initiallyExpanded: _completedExpanded,
+                          onExpansionChanged: (expanded) {
+                            // Track state without triggering a full rebuild to avoid refresh flashes.
+                            _completedExpanded = expanded;
+                          },
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.check_circle_rounded,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                          title: Text(
+                            'Completed (${completed.length})',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            'Tap to review what you have finished',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                          childrenPadding: const EdgeInsets.fromLTRB(
+                            12,
+                            0,
+                            12,
+                            16,
+                          ),
+                          children: [
+                            ...completed.map(
+                              (hw) => Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: HomeworkCard(homework: hw),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (allHomework.isEmpty)
                 SliverFillRemaining(
                   child: Center(
                     child: Column(
