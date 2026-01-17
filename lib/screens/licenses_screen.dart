@@ -7,7 +7,7 @@ class LicensesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return LicensePage(
       applicationName: 'LastMinute',
-      applicationLegalese: '© 2024 LastMinute. All rights reserved.',
+      applicationLegalese: '© 2026 Aadish Samir.',
       applicationIcon: SizedBox(
         width: 100,
         height: 100,
