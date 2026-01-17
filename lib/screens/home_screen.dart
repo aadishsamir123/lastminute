@@ -257,11 +257,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   AppBar(
                     title: Row(
                       children: [
-                        Icon(
-                          Icons.schedule,
-                          color: colorScheme.primary,
-                          size: 28,
-                        ),
+                        Icon(Icons.alarm, color: colorScheme.primary, size: 28),
                         const SizedBox(width: 8),
                         const Flexible(
                           child: Text(
@@ -379,7 +375,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         appBar: AppBar(
           title: Row(
             children: [
-              Icon(Icons.schedule, color: colorScheme.primary, size: 28),
+              Icon(Icons.alarm, color: colorScheme.primary, size: 28),
               const SizedBox(width: 8),
               const Flexible(
                 child: Text(

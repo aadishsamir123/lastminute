@@ -14,7 +14,7 @@ class LicensesScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Icon(
-            Icons.schedule,
+            Icons.alarm,
             size: 64,
             color: Theme.of(context).colorScheme.primary,
           ),
