@@ -17,6 +17,7 @@ import '../widgets/stats_card.dart';
 import 'calendar_screen.dart';
 import 'homework_detail_screen.dart';
 import 'launcher_screen.dart';
+import 'licenses_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -825,6 +826,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 leading: const Icon(Icons.description_outlined),
                 title: const Text('Because Deadlines Always Sneak Up'),
                 subtitle: const Text('Stay organized with homework reminders'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.gavel_outlined),
+                title: const Text('Licenses'),
+                subtitle: const Text('View open source licenses'),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const LicensesScreen(),
+                    ),
+                  );
+                },
               ),
             ],
           ),
