@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Enable version updates for Dart/Flutter packages
+  - package-ecosystem: "pub"
+    directory: "/"
+    schedule:
+      interval: "daily"
+
+  # Enable version updates for Gradle (Android)
+  - package-ecosystem: "gradle"
+    directory: "/android"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "gradle"
+    directory: "/android/app"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
