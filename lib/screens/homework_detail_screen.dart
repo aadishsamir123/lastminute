@@ -330,31 +330,34 @@ class _HomeworkDetailScreenState extends State<HomeworkDetailScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    SegmentedButton<Priority>(
-                      selected: {_priority},
-                      onSelectionChanged: (Set<Priority> newSelection) {
-                        setState(() => _priority = newSelection.first);
-                      },
-                      segments: const [
-                        ButtonSegment(
-                          value: Priority.low,
-                          label: Text('Low'),
-                          icon: Icon(Icons.flag_outlined),
-                        ),
-                        ButtonSegment(
-                          value: Priority.medium,
-                          label: Text('Medium'),
-                        ),
-                        ButtonSegment(
-                          value: Priority.high,
-                          label: Text('High'),
-                        ),
-                        ButtonSegment(
-                          value: Priority.urgent,
-                          label: Text('Urgent'),
-                          icon: Icon(Icons.priority_high_rounded),
-                        ),
-                      ],
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SegmentedButton<Priority>(
+                        selected: {_priority},
+                        onSelectionChanged: (Set<Priority> newSelection) {
+                          setState(() => _priority = newSelection.first);
+                        },
+                        segments: const [
+                          ButtonSegment(
+                            value: Priority.low,
+                            label: Text('Low'),
+                            icon: Icon(Icons.flag_outlined),
+                          ),
+                          ButtonSegment(
+                            value: Priority.medium,
+                            label: Text('Medium'),
+                          ),
+                          ButtonSegment(
+                            value: Priority.high,
+                            label: Text('High'),
+                          ),
+                          ButtonSegment(
+                            value: Priority.urgent,
+                            label: Text('Urgent'),
+                            icon: Icon(Icons.priority_high_rounded),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
