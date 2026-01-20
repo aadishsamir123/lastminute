@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_usage/app_usage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -10,6 +11,7 @@ import '../models/homework.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/github_service.dart';
+import '../services/notification_service.dart';
 import '../services/study_mode_service.dart';
 import '../widgets/github_commit_card.dart';
 import '../widgets/homework_card.dart';
@@ -801,6 +803,84 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         const SizedBox(height: 16),
         GithubCommitCard(githubService: widget.githubService),
+        const SizedBox(height: 16),
+        // Debug Mode: Test Notification Button
+        if (kDebugMode)
+          Card(
+            color: Theme.of(context).colorScheme.tertiaryContainer,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(
+                    Icons.bug_report_outlined,
+                    color: Theme.of(context).colorScheme.onTertiaryContainer,
+                  ),
+                  title: Text(
+                    'Debug Mode',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onTertiaryContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Testing utilities for development',
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onTertiaryContainer.withOpacity(0.8),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () async {
+                          try {
+                            await NotificationService().showTestNotification();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Test notification sent!'),
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed: $e'),
+                                  backgroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.error,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.notifications_active),
+                        label: const Text('Send Test Notification'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.tertiary,
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         const SizedBox(height: 16),
         Card(
           child: Column(

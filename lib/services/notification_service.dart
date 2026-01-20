@@ -5,6 +5,12 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../models/homework.dart' as hw;
 
+/// Background notification handler - must be top-level function
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse notificationResponse) {
+  print('🔔 Notification tapped in background: ${notificationResponse.id}');
+}
+
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -13,6 +19,7 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
   static const int _studyNotificationId = 1001;
+  bool _initialized = false;
 
   Future<void> initialize() async {
     if (kIsWeb) {
@@ -20,10 +27,18 @@ class NotificationService {
       return;
     }
 
+    if (_initialized) {
+      print('ℹ️ Notification service already initialized');
+      return;
+    }
+
     try {
       print('🔔 Initializing notification service...');
       tz.initializeTimeZones();
-      print('✅ Timezone initialized');
+
+      // Set local timezone
+      tz.setLocalLocation(tz.getLocation('America/New_York'));
+      print('✅ Timezone initialized: ${tz.local}');
 
       const androidSettings = AndroidInitializationSettings(
         '@mipmap/ic_launcher',
@@ -39,17 +54,27 @@ class NotificationService {
         iOS: iosSettings,
       );
 
-      final initialized = await _notifications.initialize(settings);
+      final initialized = await _notifications.initialize(
+        settings,
+        onDidReceiveNotificationResponse: _onNotificationTap,
+        onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+      );
       print('✅ Notification plugin initialized: $initialized');
 
       // Request permissions
       if (defaultTargetPlatform == TargetPlatform.android) {
-        final granted = await _notifications
+        final androidPlugin = _notifications
             .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin
-            >()
-            ?.requestNotificationsPermission();
+            >();
+
+        final granted = await androidPlugin?.requestNotificationsPermission();
         print('🔔 Android notification permission granted: $granted');
+
+        // Request exact alarm permission for scheduled notifications
+        final exactAlarmGranted = await androidPlugin
+            ?.requestExactAlarmsPermission();
+        print('🔔 Android exact alarm permission granted: $exactAlarmGranted');
       } else if (defaultTargetPlatform == TargetPlatform.iOS) {
         final granted = await _notifications
             .resolvePlatformSpecificImplementation<
@@ -59,11 +84,16 @@ class NotificationService {
         print('🔔 iOS notification permission granted: $granted');
       }
 
+      _initialized = true;
       print('✅ Notification service initialized successfully');
     } catch (e, stackTrace) {
       print('❌ ERROR initializing notification service: $e');
       print('📋 Stack trace: $stackTrace');
     }
+  }
+
+  void _onNotificationTap(NotificationResponse response) {
+    print('👆 User tapped notification: ${response.id}');
   }
 
   Future<void> scheduleHomeworkReminder(hw.Homework homework) async {
@@ -115,14 +145,22 @@ class NotificationService {
     required DateTime scheduledDate,
   }) async {
     try {
-      final tzScheduledDate = tz.TZDateTime.from(scheduledDate, tz.local);
-      print('📅 Scheduling notification ID $id for $tzScheduledDate');
+      print('📅 Scheduling notification ID $id for $scheduledDate');
 
+      // Calculate the delay from now to the scheduled date
+      final delay = scheduledDate.difference(DateTime.now());
+
+      if (delay.isNegative) {
+        print('⏭️ Scheduled time is in the past, skipping');
+        return;
+      }
+
+      // Use simpler scheduling approach without timezone complications
       await _notifications.zonedSchedule(
         id,
         title,
         body,
-        tzScheduledDate,
+        tz.TZDateTime.now(tz.local).add(delay),
         const NotificationDetails(
           android: AndroidNotificationDetails(
             'homework_reminders',
@@ -130,8 +168,14 @@ class NotificationService {
             channelDescription: 'Notifications for homework deadlines',
             importance: Importance.high,
             priority: Priority.high,
+            enableVibration: true,
+            playSound: true,
           ),
-          iOS: DarwinNotificationDetails(),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
@@ -263,5 +307,34 @@ class NotificationService {
         ? '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}'
         : '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     return 'Remaining: $timeStr';
+  }
+
+  /// Show a test notification (for debug mode)
+  Future<void> showTestNotification() async {
+    if (kIsWeb) return;
+
+    try {
+      print('🧪 Showing test notification...');
+
+      // Show instantly
+      await showInstantNotification(
+        title: 'Test Notification 🧪',
+        body: 'This is a test notification. Notifications are working!',
+      );
+
+      // Also schedule one for 5 seconds from now
+      final scheduledDate = DateTime.now().add(const Duration(seconds: 5));
+      await _scheduleNotification(
+        id: 9999,
+        title: 'Delayed Test Notification 🔔',
+        body: 'This notification was scheduled 5 seconds ago',
+        scheduledDate: scheduledDate,
+      );
+
+      print('✅ Test notifications sent (instant + 5 second delay)');
+    } catch (e, stackTrace) {
+      print('❌ ERROR showing test notification: $e');
+      print('📋 Stack trace: $stackTrace');
+    }
   }
 }
