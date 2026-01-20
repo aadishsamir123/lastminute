@@ -77,13 +77,18 @@ class HomeworkCard extends StatelessWidget {
                             color: colorScheme.primary,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            homework.subject!,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: colorScheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                          Expanded(
+                            child: Text(
+                              homework.subject!,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
                           ),
                         ],
                       ),
